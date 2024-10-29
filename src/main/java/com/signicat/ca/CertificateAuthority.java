@@ -32,7 +32,7 @@ public class CertificateAuthority {
     private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
     private Certificate rootCertificate;
     private Certificate intermediateCertificate;
-    private boolean isRandomGenerated =false;
+    private boolean isRandomGenerated = false;
 
     protected static final Logger LOG = LogManager.getLogger(CertificateAuthority.class.getName());
 
@@ -42,6 +42,7 @@ public class CertificateAuthority {
         Subject rootSubject;
         Subject intermediateSubject;
         if (randomGenerate) {
+            LOG.debug("Generating random certificates");
             this.isRandomGenerated = true;
             var rdg = new RandomDataGenerator();
             var companyName =  rdg.generateCompanyName();
@@ -50,6 +51,7 @@ public class CertificateAuthority {
             rootSubject = Subject.builder().commonName("ROOT CA").country(country).locality(city).organization(companyName).build();
             intermediateSubject=Subject.builder().commonName("Intermediate CA").country(country).locality(city).organization(companyName).build();
         } else {
+            LOG.debug("Generating root and intermediate CA certificates");
             rootSubject = Subject.builder().commonName("Root CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
             intermediateSubject=Subject.builder().commonName("Intermediate CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
         }
@@ -72,6 +74,7 @@ public class CertificateAuthority {
     private void generateRootCertificate(X500Name rootSubject, int keySize) throws Exception {
         KeyPair rootKeyPair = generateKeyPair(keySize);
         var cert = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true);
+        LOG.debug("Generated root certificate");
         this.rootCertificate = new Certificate(cert, rootKeyPair.getPrivate(), rootKeyPair.getPublic());
     }
 
@@ -79,6 +82,7 @@ public class CertificateAuthority {
         KeyPair intermediateKeyPair = generateKeyPair(keySize);
         var cert = generateCertificate(intermediateSubject, this.rootCertificate.getSubject(),
                 intermediateKeyPair.getPublic(),  this.rootCertificate.getPrivateKey(), false);
+        LOG.debug("Generated intermediate certificate");
         this.intermediateCertificate = new Certificate(cert, intermediateKeyPair.getPrivate(), intermediateKeyPair.getPublic());
     }
 
@@ -130,7 +134,7 @@ public class CertificateAuthority {
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
         ContentSigner csrContentSigner = csrBuilder.build(keyPair.getPrivate());
         PKCS10CertificationRequest csr = p10Builder.build(csrContentSigner);
-
+        LOG.debug("Generated CSR");
         return new Csr(csr, keyPair.getPrivate(), keyPair.getPublic());
     }
 
@@ -159,7 +163,7 @@ public class CertificateAuthority {
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
         ContentSigner csrContentSigner = csrBuilder.build(this.rootCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
-
+        LOG.debug("Generated certificate from root");
         return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder), null, (PublicKey) csr.getSubjectPublicKeyInfo());
 
     }
@@ -183,7 +187,7 @@ public class CertificateAuthority {
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
         ContentSigner csrContentSigner = csrBuilder.build(this.intermediateCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
-
+        LOG.debug("Generated certificate from intermediate");
         return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder),null, (PublicKey) csr.getSubjectPublicKeyInfo());
     }
 
