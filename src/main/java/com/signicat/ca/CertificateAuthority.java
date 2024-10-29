@@ -30,15 +30,8 @@ public class CertificateAuthority {
     private static final String BC_PROVIDER = "BC";
     private static final String KEY_ALGORITHM = "RSA";
     private static final String SIGNATURE_ALGORITHM = "SHA256withRSA";
-
-    private X509Certificate rootCertificate;
-    private final X500Name rootSubject;
-    private PrivateKey rootPrivateKey;
-    private PublicKey rootPublicKey;
-    private X509Certificate intermediateCertificate;
-    private final X500Name intermediateSubject;
-    private PrivateKey intermediatePrivateKey;
-    private PublicKey intermediatePublicKey;
+    private Certificate rootCertificate;
+    private Certificate intermediateCertificate;
     private boolean isRandomGenerated =false;
 
     protected static final Logger LOG = LogManager.getLogger(CertificateAuthority.class.getName());
@@ -46,20 +39,22 @@ public class CertificateAuthority {
     public CertificateAuthority(boolean randomGenerate) throws Exception {
         Security.addProvider(new BouncyCastleProvider());
         int keySize = 4096;
+        Subject rootSubject;
+        Subject intermediateSubject;
         if (randomGenerate) {
             this.isRandomGenerated = true;
             var rdg = new RandomDataGenerator();
             var companyName =  rdg.generateCompanyName();
             var country = rdg.generateCountry();
             var city = rdg.generateCity();
-            this.rootSubject = Subject.builder().commonName("ROOT CA").country(country).locality(city).organization(companyName).build().getX500Name();
-            this.intermediateSubject=Subject.builder().commonName("Intermediate CA").country(country).locality(city).organization(companyName).build().getX500Name();
+            rootSubject = Subject.builder().commonName("ROOT CA").country(country).locality(city).organization(companyName).build();
+            intermediateSubject=Subject.builder().commonName("Intermediate CA").country(country).locality(city).organization(companyName).build();
         } else {
-            this.rootSubject= Subject.builder().commonName("Root CA").organization("Signicat AS").country("NO").locality("Trondheim").build().getX500Name();
-            this.intermediateSubject=Subject.builder().commonName("Intermediate CA").organization("Signicat AS").country("NO").locality("Trondheim").build().getX500Name();
+            rootSubject = Subject.builder().commonName("Root CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
+            intermediateSubject=Subject.builder().commonName("Intermediate CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
         }
-        generateRootCertificate(this.rootSubject, keySize);
-        generateIntermediateCertificate(this.intermediateSubject, keySize);
+        generateRootCertificate(rootSubject.getX500Name(), keySize);
+        generateIntermediateCertificate(intermediateSubject.getX500Name(), keySize);
     }
 
     public boolean isRandomGenerated() {
@@ -67,42 +62,40 @@ public class CertificateAuthority {
     }
 
     public X500Name getIntermediateSubject() {
-        return this.intermediateSubject;
+        return this.intermediateCertificate.getSubject();
     }
 
     public X500Name getRootSubject() {
-        return this.rootSubject;
+        return this.rootCertificate.getSubject();
     }
 
     private void generateRootCertificate(X500Name rootSubject, int keySize) throws Exception {
         KeyPair rootKeyPair = generateKeyPair(keySize);
-        this.rootCertificate = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true);
-        this.rootPrivateKey = rootKeyPair.getPrivate();
-        this.rootPublicKey = rootKeyPair.getPublic();
+        var cert = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true);
+        this.rootCertificate = new Certificate(cert, rootKeyPair.getPrivate(), rootKeyPair.getPublic());
     }
 
     private void generateIntermediateCertificate(X500Name intermediateSubject, int keySize) throws Exception {
         KeyPair intermediateKeyPair = generateKeyPair(keySize);
-        this.intermediateCertificate = generateCertificate(intermediateSubject, new X500Name(rootCertificate.getSubjectX500Principal().getName()),
-                intermediateKeyPair.getPublic(), rootPrivateKey, false);
-        this.intermediatePrivateKey = intermediateKeyPair.getPrivate();
-        this.intermediatePublicKey = intermediateKeyPair.getPublic();
+        var cert = generateCertificate(intermediateSubject, this.rootCertificate.getSubject(),
+                intermediateKeyPair.getPublic(),  this.rootCertificate.getPrivateKey(), false);
+        this.intermediateCertificate = new Certificate(cert, intermediateKeyPair.getPrivate(), intermediateKeyPair.getPublic());
     }
 
     public X509Certificate getRootCertificate() {
-        return rootCertificate;
+        return this.rootCertificate.getCertificate();
     }
 
     public PublicKey getRootPublicKey() {
-        return this.rootPublicKey;
+        return this.rootCertificate.getPublicKey();
     }
 
     public X509Certificate getIntermediateCertificate() {
-        return this.intermediateCertificate;
+        return this.intermediateCertificate.getCertificate();
     }
 
     public PublicKey getIntermediatePublicKey() {
-        return this.intermediatePublicKey;
+        return this.intermediateCertificate.getPublicKey();
     }
 
 
@@ -129,7 +122,7 @@ public class CertificateAuthority {
         return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder);
     }
 
-    public String createCSR(String subjectString, int length) throws Exception {
+    public Csr createCSR(String subjectString, int length) throws Exception {
 
         KeyPair keyPair = generateKeyPair(length);
         X500Name subject = Subject.parseSubjectString(subjectString);
@@ -138,11 +131,7 @@ public class CertificateAuthority {
         ContentSigner csrContentSigner = csrBuilder.build(keyPair.getPrivate());
         PKCS10CertificationRequest csr = p10Builder.build(csrContentSigner);
 
-        StringWriter stringWriter = new StringWriter();
-        try (JcaPEMWriter pemWriter = new JcaPEMWriter(stringWriter)) {
-            pemWriter.writeObject(csr);
-        }
-        return stringWriter.toString();
+        return new Csr(csr, keyPair.getPrivate(), keyPair.getPublic());
     }
 
     private Date addDays(Date dt, int days) {
@@ -151,7 +140,7 @@ public class CertificateAuthority {
         return Date.from(endLocalDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
     }
 
-    public X509Certificate issueCertificateFromRoot(PKCS10CertificationRequest csr, int days) throws Exception {
+    public Certificate issueCertificateFromRoot(PKCS10CertificationRequest csr, int days) throws Exception {
         Date beginDate = new Date();
         Date endDate = addDays(beginDate, days);
         if (days < 0) {
@@ -159,7 +148,7 @@ public class CertificateAuthority {
             endDate = new Date();
         }
         X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(
-                new X500Name(this.rootCertificate.getSubjectX500Principal().getName()),
+                this.rootCertificate.getSubject(),
                 BigInteger.valueOf(System.currentTimeMillis()),
                 beginDate,
                 endDate,
@@ -168,13 +157,14 @@ public class CertificateAuthority {
         );
 
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
-        ContentSigner csrContentSigner = csrBuilder.build(this.rootPrivateKey);
+        ContentSigner csrContentSigner = csrBuilder.build(this.rootCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
 
-        return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder);
+        return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder), null, (PublicKey) csr.getSubjectPublicKeyInfo());
+
     }
 
-    public X509Certificate issueCertificateFromIntermediate(PKCS10CertificationRequest csr, int days) throws Exception {
+    public Certificate issueCertificateFromIntermediate(PKCS10CertificationRequest csr, int days) throws Exception {
         Date beginDate = new Date();
         Date endDate = addDays(beginDate, days);
         if (days < 0) {
@@ -182,7 +172,7 @@ public class CertificateAuthority {
             endDate = new Date();
         }
         X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(
-                new X500Name(this.intermediateCertificate.getSubjectX500Principal().getName()),
+                this.intermediateCertificate.getSubject(),
                 BigInteger.valueOf(System.currentTimeMillis()),
                 beginDate,
                 endDate,
@@ -191,10 +181,10 @@ public class CertificateAuthority {
         );
 
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
-        ContentSigner csrContentSigner = csrBuilder.build(this.intermediatePrivateKey);
+        ContentSigner csrContentSigner = csrBuilder.build(this.intermediateCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
 
-        return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder);
+        return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder),null, (PublicKey) csr.getSubjectPublicKeyInfo());
     }
 
     public String convertToPEM(X509Certificate certificate) throws Exception {
