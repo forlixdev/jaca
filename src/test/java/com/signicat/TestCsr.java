@@ -10,10 +10,10 @@ import static org.hamcrest.Matchers.*;
 public class TestCsr {
 
     @Test
-    public void testCertificateAuthority() throws Exception {
-        CertificateAuthority ca = new CertificateAuthority(true);
+    public void testCsrCreation() throws Exception {
+        CertificateAuthority ca = new CertificateAuthority(true, 2048);
         String subject = "CN=example.com,C=NO,L=Trondheim";
-        Csr csr = ca.createCSR(subject, 4096);
+        Csr csr = ca.createCSR(subject, 2048);
         assertThat(csr.getCsr().getSubject(), equalTo(Subject.parseSubjectString(subject)));
     }
 }

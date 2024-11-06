@@ -24,6 +24,8 @@ import java.security.cert.X509Certificate;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicLong;
+
 import com.signicat.utils.RandomDataGenerator;
 
 public class CertificateAuthority {
@@ -33,12 +35,14 @@ public class CertificateAuthority {
     private Certificate rootCertificate;
     private Certificate intermediateCertificate;
     private boolean isRandomGenerated = false;
+    private static final AtomicLong serialNumberCounter = new AtomicLong(System.currentTimeMillis());
 
     protected static final Logger LOG = LogManager.getLogger(CertificateAuthority.class.getName());
+    private static final ThreadLocal<BouncyCastleProvider> bcProvider = ThreadLocal.withInitial(BouncyCastleProvider::new);
 
-    public CertificateAuthority(boolean randomGenerate) throws Exception {
-        Security.addProvider(new BouncyCastleProvider());
-        int keySize = 4096;
+
+    public CertificateAuthority(boolean randomGenerate, int keySize) throws Exception {
+        Security.addProvider(bcProvider.get());
         Subject rootSubject;
         Subject intermediateSubject;
         if (randomGenerate) {
@@ -57,6 +61,7 @@ public class CertificateAuthority {
         }
         generateRootCertificate(rootSubject.getX500Name(), keySize);
         generateIntermediateCertificate(intermediateSubject.getX500Name(), keySize);
+
     }
 
     public boolean isRandomGenerated() {
@@ -72,13 +77,17 @@ public class CertificateAuthority {
     }
 
     private void generateRootCertificate(X500Name rootSubject, int keySize) throws Exception {
+        LOG.debug("Generating root certificate");
+        LOG.trace("Generating root key pair");
         KeyPair rootKeyPair = generateKeyPair(keySize);
+        LOG.trace("Generated root key pair");
         var cert = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true);
         LOG.debug("Generated root certificate");
         this.rootCertificate = new Certificate(cert, rootKeyPair.getPrivate(), rootKeyPair.getPublic());
     }
 
     private void generateIntermediateCertificate(X500Name intermediateSubject, int keySize) throws Exception {
+        LOG.debug("Generating intermediate certificate");
         KeyPair intermediateKeyPair = generateKeyPair(keySize);
         var cert = generateCertificate(intermediateSubject, this.rootCertificate.getSubject(),
                 intermediateKeyPair.getPublic(),  this.rootCertificate.getPrivateKey(), false);
@@ -104,26 +113,30 @@ public class CertificateAuthority {
 
 
     private KeyPair generateKeyPair(int length) throws Exception {
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, BC_PROVIDER);
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, bcProvider.get());
         keyPairGenerator.initialize(length);
         return keyPairGenerator.generateKeyPair();
     }
 
     private X509Certificate generateCertificate(X500Name subject, X500Name issuer, PublicKey publicKey, PrivateKey privateKey, boolean isCa) throws Exception {
         Date startDate = new Date();
+        LOG.trace("Generated start date: " + startDate);
         Date endDate = new Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000L);
-        BigInteger serialNumber = BigInteger.valueOf(System.currentTimeMillis());
-
+        LOG.trace("Generated end date: " + endDate);
+        LOG.trace("Generating certificate for subject: " + subject + ", issuer: " + issuer);
+        BigInteger serialNumber = BigInteger.valueOf(serialNumberCounter.getAndIncrement());
+        LOG.trace("Generated serial number: " + serialNumber);
         X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(issuer, serialNumber, startDate, endDate, subject, publicKey);
-
+        LOG.trace("Generated certificate");
         if (isCa) {
             certBuilder.addExtension(Extension.basicConstraints, true, new BasicConstraints(true));
         }
-
-        ContentSigner contentSigner = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER).build(privateKey);
+        LOG.trace("Generated certificate extensions");
+        ContentSigner contentSigner = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(bcProvider.get()).build(privateKey);
+        LOG.trace("Generated certificate signer");
         X509CertificateHolder certHolder = certBuilder.build(contentSigner);
-
-        return new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder);
+        LOG.trace("Generated certificate holder");
+        return new JcaX509CertificateConverter().setProvider(bcProvider.get()).getCertificate(certHolder);
     }
 
     public Csr createCSR(String subjectString, int length) throws Exception {
@@ -131,7 +144,7 @@ public class CertificateAuthority {
         KeyPair keyPair = generateKeyPair(length);
         X500Name subject = Subject.parseSubjectString(subjectString);
         PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(subject, keyPair.getPublic());
-        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
+        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(bcProvider.get());
         ContentSigner csrContentSigner = csrBuilder.build(keyPair.getPrivate());
         PKCS10CertificationRequest csr = p10Builder.build(csrContentSigner);
         LOG.debug("Generated CSR");
@@ -160,11 +173,11 @@ public class CertificateAuthority {
                 csr.getSubjectPublicKeyInfo()
         );
 
-        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
+        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(bcProvider.get());
         ContentSigner csrContentSigner = csrBuilder.build(this.rootCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
         LOG.debug("Generated certificate from root");
-        return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder), null, (PublicKey) csr.getSubjectPublicKeyInfo());
+        return new Certificate(new JcaX509CertificateConverter().setProvider(bcProvider.get()).getCertificate(certHolder), null, (PublicKey) csr.getSubjectPublicKeyInfo());
 
     }
 
@@ -184,11 +197,11 @@ public class CertificateAuthority {
                 csr.getSubjectPublicKeyInfo()
         );
 
-        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(BC_PROVIDER);
+        JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(bcProvider.get());
         ContentSigner csrContentSigner = csrBuilder.build(this.intermediateCertificate.getPrivateKey());
         X509CertificateHolder certHolder = certBuilder.build(csrContentSigner);
         LOG.debug("Generated certificate from intermediate");
-        return new Certificate(new JcaX509CertificateConverter().setProvider(BC_PROVIDER).getCertificate(certHolder),null, (PublicKey) csr.getSubjectPublicKeyInfo());
+        return new Certificate(new JcaX509CertificateConverter().setProvider(bcProvider.get()).getCertificate(certHolder),null, (PublicKey) csr.getSubjectPublicKeyInfo());
     }
 
     public String convertToPEM(X509Certificate certificate) throws Exception {

@@ -160,6 +160,7 @@ public class Subject {
     }
 
     public static X500Name parseSubjectString(String subjectString) {
+        LOG.trace("Parsing subject string: {}", subjectString);
         X500NameBuilder builder = new X500NameBuilder(BCStyle.INSTANCE);
         var parts = subjectString.split(",");
         for (var part : parts) {
