@@ -3,8 +3,7 @@ package com.signicat.ca;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.asn1.x500.X500Name;
-import org.bouncycastle.asn1.x509.BasicConstraints;
-import org.bouncycastle.asn1.x509.Extension;
+import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.cert.X509CertificateHolder;
 import org.bouncycastle.cert.X509v3CertificateBuilder;
 import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter;
@@ -16,7 +15,7 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
-
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import java.io.*;
 import java.math.BigInteger;
 import java.security.*;
@@ -24,9 +23,11 @@ import java.security.cert.X509Certificate;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Date;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.signicat.utils.RandomDataGenerator;
+
 
 public class CertificateAuthority {
     private static final String BC_PROVIDER = "BC";
@@ -139,11 +140,69 @@ public class CertificateAuthority {
         return new JcaX509CertificateConverter().setProvider(bcProvider.get()).getCertificate(certHolder);
     }
 
-    public Csr createCSR(String subjectString, int length) throws Exception {
+    private KeyUsage createKeyUsage (String use) {
+            int usage = 0;
+            switch (use.toUpperCase()) {
+                case "DIGITAL_SIGNATURE" -> usage |= KeyUsage.digitalSignature;
+                case "NON_REPUDIATION" -> usage |= KeyUsage.nonRepudiation;
+                case "KEY_ENCIPHERMENT" -> usage |= KeyUsage.keyEncipherment;
+                case "DATA_ENCIPHERMENT" -> usage |= KeyUsage.dataEncipherment;
+                case "KEY_AGREEMENT" -> usage |= KeyUsage.keyAgreement;
+                case "KEY_CERT_SIGN" -> usage |= KeyUsage.keyCertSign;
+                case "CRL_SIGN" -> usage |= KeyUsage.cRLSign;
+                case "ENCIPHER_ONLY" -> usage |= KeyUsage.encipherOnly;
+                case "DECIPHER_ONLY" -> usage |= KeyUsage.decipherOnly;
+                default -> LOG.warn("Unknown key usage: {}", use);
+            }
+        return new KeyUsage(usage);
+    }
+
+    private GeneralName createGeneralName(String value) {
+        if (value.startsWith("DNS:")) {
+            return new GeneralName(GeneralName.dNSName, value.substring(4));
+        } else if (value.startsWith("IP:")) {
+            return new GeneralName(GeneralName.iPAddress, value.substring(3));
+        } else if (value.startsWith("EMAIL:")) {
+            return new GeneralName(GeneralName.rfc822Name, value.substring(6));
+        } else if (value.startsWith("URI:")) {
+            return new GeneralName(GeneralName.uniformResourceIdentifier, value.substring(4));
+        } else {
+            // Default to DNS if no prefix is provided
+            return new GeneralName(GeneralName.dNSName, value);
+        }
+    }
+
+    public Csr createCSR(String subjectString, int length, List<String> san, List<String> keyUsage) throws Exception {
 
         KeyPair keyPair = generateKeyPair(length);
         X500Name subject = Subject.parseSubjectString(subjectString);
         PKCS10CertificationRequestBuilder p10Builder = new JcaPKCS10CertificationRequestBuilder(subject, keyPair.getPublic());
+
+        if (san != null && !san.isEmpty()) {
+            ExtensionsGenerator extGen = new ExtensionsGenerator();
+            GeneralName[] names = san.stream()
+                  .map(this::createGeneralName)
+                  .toArray(GeneralName[]::new);
+            GeneralNames subjectAltNames = new GeneralNames(names);
+            extGen.addExtension(Extension.subjectAlternativeName, false, subjectAltNames);
+            p10Builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extGen.generate());
+        }
+
+        if (keyUsage!= null &&!keyUsage.isEmpty()) {
+            ExtensionsGenerator extGen = new ExtensionsGenerator();
+            List<KeyUsage> keyUsages = keyUsage.stream()
+                  .map(this::createKeyUsage)
+                  .toList();
+            keyUsages.forEach(x -> {
+               try {
+                  extGen.addExtension(Extension.keyUsage, true, x);
+               } catch (IOException e) {
+                   LOG.error("Error while adding key usage extension: {}", e.getMessage());
+               }
+            });
+            p10Builder.addAttribute(PKCSObjectIdentifiers.pkcs_9_at_extensionRequest, extGen.generate());
+        }
+
         JcaContentSignerBuilder csrBuilder = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(bcProvider.get());
         ContentSigner csrContentSigner = csrBuilder.build(keyPair.getPrivate());
         PKCS10CertificationRequest csr = p10Builder.build(csrContentSigner);
