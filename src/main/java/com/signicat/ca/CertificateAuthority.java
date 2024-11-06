@@ -37,12 +37,13 @@ public class CertificateAuthority {
     private Certificate intermediateCertificate;
     private boolean isRandomGenerated = false;
     private static final AtomicLong serialNumberCounter = new AtomicLong(System.currentTimeMillis());
-
+    private int validityDays=365;
     protected static final Logger LOG = LogManager.getLogger(CertificateAuthority.class.getName());
     private static final ThreadLocal<BouncyCastleProvider> bcProvider = ThreadLocal.withInitial(BouncyCastleProvider::new);
 
 
-    public CertificateAuthority(boolean randomGenerate, int keySize) throws Exception {
+    public CertificateAuthority(boolean randomGenerate, int keySize, Integer days) throws Exception {
+        days= days==null? this.validityDays : days;
         Security.addProvider(bcProvider.get());
         Subject rootSubject;
         Subject intermediateSubject;
@@ -60,8 +61,8 @@ public class CertificateAuthority {
             rootSubject = Subject.builder().commonName("Root CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
             intermediateSubject=Subject.builder().commonName("Intermediate CA").organization("Signicat AS").country("NO").locality("Trondheim").build();
         }
-        generateRootCertificate(rootSubject.getX500Name(), keySize);
-        generateIntermediateCertificate(intermediateSubject.getX500Name(), keySize);
+        generateRootCertificate(rootSubject.getX500Name(), keySize, days);
+        generateIntermediateCertificate(intermediateSubject.getX500Name(), keySize, days);
 
     }
 
@@ -77,21 +78,21 @@ public class CertificateAuthority {
         return this.rootCertificate.getSubject();
     }
 
-    private void generateRootCertificate(X500Name rootSubject, int keySize) throws Exception {
+    private void generateRootCertificate(X500Name rootSubject, int keySize, int days) throws Exception {
         LOG.debug("Generating root certificate");
         LOG.trace("Generating root key pair");
         KeyPair rootKeyPair = generateKeyPair(keySize);
         LOG.trace("Generated root key pair");
-        var cert = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true);
+        var cert = generateCertificate(rootSubject, rootSubject, rootKeyPair.getPublic(), rootKeyPair.getPrivate(), true, days);
         LOG.debug("Generated root certificate");
         this.rootCertificate = new Certificate(cert, rootKeyPair.getPrivate(), rootKeyPair.getPublic());
     }
 
-    private void generateIntermediateCertificate(X500Name intermediateSubject, int keySize) throws Exception {
+    private void generateIntermediateCertificate(X500Name intermediateSubject, int keySize, int days) throws Exception {
         LOG.debug("Generating intermediate certificate");
         KeyPair intermediateKeyPair = generateKeyPair(keySize);
         var cert = generateCertificate(intermediateSubject, this.rootCertificate.getSubject(),
-                intermediateKeyPair.getPublic(),  this.rootCertificate.getPrivateKey(), false);
+                intermediateKeyPair.getPublic(),  this.rootCertificate.getPrivateKey(), false, days);
         LOG.debug("Generated intermediate certificate");
         this.intermediateCertificate = new Certificate(cert, intermediateKeyPair.getPrivate(), intermediateKeyPair.getPublic());
     }
@@ -114,15 +115,20 @@ public class CertificateAuthority {
 
 
     private KeyPair generateKeyPair(int length) throws Exception {
+        LOG.trace("Generating key pair");
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, bcProvider.get());
         keyPairGenerator.initialize(length);
         return keyPairGenerator.generateKeyPair();
     }
 
-    private X509Certificate generateCertificate(X500Name subject, X500Name issuer, PublicKey publicKey, PrivateKey privateKey, boolean isCa) throws Exception {
+    private X509Certificate generateCertificate(X500Name subject, X500Name issuer, PublicKey publicKey, PrivateKey privateKey, boolean isCa, int days) throws Exception {
+
         Date startDate = new Date();
-        LOG.trace("Generated start date: " + startDate);
-        Date endDate = new Date(System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000L);
+        Date endDate = addDays(startDate, days);
+        if (days < 0) {
+            startDate = endDate;
+            endDate = new Date();
+        }
         LOG.trace("Generated end date: " + endDate);
         LOG.trace("Generating certificate for subject: " + subject + ", issuer: " + issuer);
         BigInteger serialNumber = BigInteger.valueOf(serialNumberCounter.getAndIncrement());
