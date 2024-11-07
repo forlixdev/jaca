@@ -1,4 +1,4 @@
-package com.signicat.ca;
+package com.forlixdev.ca;
 
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 

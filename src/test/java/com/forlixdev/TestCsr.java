@@ -1,9 +1,9 @@
-package com.signicat;
+package com.forlixdev;
 
-import com.signicat.ca.CertificateAuthority;
-import com.signicat.utils.CryptoUtils;
-import com.signicat.ca.Csr;
-import com.signicat.ca.Subject;
+import com.forlixdev.ca.CertificateAuthority;
+import com.forlixdev.utils.CryptoUtils;
+import com.forlixdev.ca.Csr;
+import com.forlixdev.ca.Subject;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

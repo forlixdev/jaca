@@ -1,4 +1,4 @@
-package com.signicat.utils;
+package com.forlixdev.utils;
 
 import java.util.Random;
 

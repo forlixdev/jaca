@@ -1,4 +1,4 @@
-package com.signicat.ca;
+package com.forlixdev.ca;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -26,7 +26,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.signicat.utils.RandomDataGenerator;
+import com.forlixdev.utils.RandomDataGenerator;
 
 
 public class CertificateAuthority {

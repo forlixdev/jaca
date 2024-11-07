@@ -1,4 +1,4 @@
-package com.signicat.ca;
+package com.forlixdev.ca;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
