@@ -2,23 +2,33 @@ package com.forlixdev.utils;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.bouncycastle.asn1.pkcs.Attribute;
+import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.openssl.jcajce.JcaPEMWriter;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
-import org.bouncycastle.asn1.pkcs.Attribute;
-import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.io.*;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * Utility class for cryptographic operations.
+ */
 public class CryptoUtils {
 
    protected static final Logger LOG = LogManager.getLogger(CryptoUtils.class.getName());
 
+   /**
+    * Converts an X.509 certificate to PEM format.
+    *
+    * @param certificate The X.509 certificate to convert.
+    * @return The PEM representation of the certificate.
+    * @throws IOException If an error occurs during the conversion.
+    */
    public static String convertCertificateToPem(X509Certificate certificate) throws IOException {
       StringWriter stringWriter = new StringWriter();
       try (JcaPEMWriter pemWriter = new JcaPEMWriter(stringWriter)) {
@@ -27,6 +37,12 @@ public class CryptoUtils {
       return stringWriter.toString();
    }
 
+   /**
+    * Converts a PEM-encoded certificate signing request (CSR) to a PKCS10CertificationRequest object.
+    *
+    * @param pem The PEM-encoded CSR.
+    * @return The parsed PKCS10CertificationRequest object.
+    */
    public static PKCS10CertificationRequest convertPemToPKCS10CertificationRequest(String pem) {
       Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
       PKCS10CertificationRequest csr = null;
@@ -47,7 +63,6 @@ public class CryptoUtils {
 
          if (parsedObj instanceof PKCS10CertificationRequest) {
             csr = (PKCS10CertificationRequest) parsedObj;
-
          }
       } catch (IOException ex) {
          //LOG.error("IOException, convertPemToPublicKey", ex);
@@ -56,6 +71,12 @@ public class CryptoUtils {
       return csr;
    }
 
+   /**
+    * Converts an object to PEM format.
+    *
+    * @param key The object to convert.
+    * @return The PEM representation of the object.
+    */
    public static String toPEM(Object key) {
       StringWriter sw = new StringWriter();
       JcaPEMWriter pem = new JcaPEMWriter(sw);
@@ -68,6 +89,12 @@ public class CryptoUtils {
       return sw.toString();
    }
 
+   /**
+    * Extracts subject alternative names (SANs) from a CSR.
+    *
+    * @param csr The CSR to extract SANs from.
+    * @return A list of SANs found in the CSR.
+    */
    public static List<String> extractSANsFromCSR(PKCS10CertificationRequest csr) {
       List<String> sanList = new ArrayList<>();
 
@@ -97,6 +124,12 @@ public class CryptoUtils {
       return sanList;
    }
 
+   /**
+    * Extracts key usage from a CSR.
+    *
+    * @param csr The CSR to extract key usage from.
+    * @return A list of key usages found in the CSR.
+    */
    public static List<String> extractKeyUsage(PKCS10CertificationRequest csr) {
       List<String> keyUsageList = new ArrayList<>();
 
@@ -127,6 +160,12 @@ public class CryptoUtils {
       return keyUsageList;
    }
 
+   /**
+    * Writes an object to a PEM file.
+    *
+    * @param key The object to write.
+    * @param filename The name of the file to write to.
+    */
    public static void toPEM(Object key, String filename) {
       String pemString = toPEM(key);
       try (FileOutputStream fos = new FileOutputStream(filename)) {

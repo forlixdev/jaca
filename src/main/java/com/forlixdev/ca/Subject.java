@@ -159,6 +159,14 @@ public class Subject {
         return new Builder();
     }
 
+    /**
+     * Parses a string representation of an X.500 Distinguished Name (DN) and constructs an X500Name object.
+     * This method supports various standard DN components and logs any invalid keys encountered during parsing.
+     *
+     * @param subjectString A string representation of the X.500 Distinguished Name, with components separated by commas
+     *                      and key-value pairs separated by '='. For example: "CN=John Doe,O=Example Inc,C=US"
+     * @return An X500Name object representing the parsed Distinguished Name
+     */
     public static X500Name parseSubjectString(String subjectString) {
         LOG.trace("Parsing subject string: {}", subjectString);
         X500NameBuilder builder = new X500NameBuilder(BCStyle.INSTANCE);
