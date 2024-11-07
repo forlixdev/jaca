@@ -22,7 +22,7 @@
         <repository>
             <id>github</id>
             <name>forlixdev</name>
-            <url>https://github.com/forlixdev/jaca</url>
+            <url>https://maven.pkg.github.com/forlixdev/jaca</url>
         </repository>
     </distributionManagement>
 
