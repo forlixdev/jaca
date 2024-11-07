@@ -1,4 +1,4 @@
-package com.forlixdev.utils;
+package io.github.forlixdev.utils;
 
 import java.util.Random;
 

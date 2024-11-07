@@ -1,9 +1,9 @@
-package com.forlixdev;
+package io.github.forlixdev;
 
-import com.forlixdev.ca.CertificateAuthority;
-import com.forlixdev.utils.CryptoUtils;
-import com.forlixdev.ca.Csr;
-import com.forlixdev.ca.Subject;
+import io.github.forlixdev.ca.CertificateAuthority;
+import io.github.forlixdev.utils.CryptoUtils;
+import io.github.forlixdev.ca.Csr;
+import io.github.forlixdev.ca.Subject;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

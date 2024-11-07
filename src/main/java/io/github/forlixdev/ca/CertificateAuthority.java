@@ -1,6 +1,6 @@
-package com.forlixdev.ca;
+package io.github.forlixdev.ca;
 
-import com.forlixdev.utils.RandomDataGenerator;
+import io.github.forlixdev.utils.RandomDataGenerator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bouncycastle.asn1.pkcs.PKCSObjectIdentifiers;

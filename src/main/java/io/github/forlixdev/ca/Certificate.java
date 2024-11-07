@@ -1,4 +1,4 @@
-package com.forlixdev.ca;
+package io.github.forlixdev.ca;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
